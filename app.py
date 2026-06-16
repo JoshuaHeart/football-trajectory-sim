@@ -6,7 +6,6 @@ from streamlit_plotly_events import plotly_events
 # --- STREAMLIT PAGE CONFIG ---
 st.set_page_config(page_title="Pro-Pitch Flight Engine", layout="wide")
 
-# Install warning handling for dependencies
 st.markdown("""
     <style>
     .main { background-color: #ffffff; color: #000000; }
@@ -16,21 +15,23 @@ st.markdown("""
     .goal-banner { text-align: center; font-size: 45px; font-weight: bold; padding: 15px; border-radius: 10px; margin-bottom: 20px; font-family: 'Arial Black'; }
     .status-goal { background-color: #d4edda; color: #155724; border: 4px solid #c3e6cb; }
     .status-miss { background-color: #f8d7da; color: #721c24; border: 4px solid #f5c6cb; }
-    /* Style the sidebar selection zone */
-    div[data-testid="stSidebarUserContent"] { padding-top: 1rem; }
     </style>
 """, unsafe_allow_html=True)
 
 st.title("⚽ Elite Trajectory Analytics")
 
 # --- SIDEBAR INTERACTIVE MAP ZONE ---
-st.sidebar.header("📍 Click to Select Starting Position")
-st.sidebar.write("Tap anywhere on the tactical pitch layout below to set your exact strike coordinates:")
+st.sidebar.header("📍 Shot Position Setup")
+st.sidebar.write("Click anywhere on the pitch below to place the ball:")
 
-# Generate the 2D Selector Map Layout
+# Generate the Green 2D Selector Map Layout
 fig_map = go.Figure()
 
-# Pitch Outline Boundary (30m depth x 30m width matrix)
+# Pitch Field Surface (Green Field Base)
+fig_map.add_trace(go.Scaleanchor=dict(), x=[-16, 16, 16, -16, -16], y=[-2, -2, 32, 32, -2],
+                  fill="toself", fillcolor="#1e4620", opacity=1.0, mode="none", showlegend=False, hoverinfo='skip')
+
+# Pitch White Outline Boundary (30m depth x 30m width matrix)
 fig_map.add_trace(go.Scatter(
     x=[-15, 15, 15, -15, -15], y=[0, 0, 30, 30, 0],
     mode='lines', line=dict(color='#ffffff', width=2), showlegend=False, hoverinfo='skip'
@@ -38,7 +39,12 @@ fig_map.add_trace(go.Scatter(
 # Goal Outline represented at the top baseline (y=30)
 fig_map.add_trace(go.Scatter(
     x=[-3.66, 3.66], y=[30, 30],
-    mode='lines', line=dict(color='#ff0055', width=5), name='Goal Mouth', showlegend=False
+    mode='lines', line=dict(color='#ffffff', width=6), name='Goal Line Outlines', showlegend=False
+))
+# Goal Depth Net Visual Box (Drawn behind the line)
+fig_map.add_trace(go.Scatter(
+    x=[-3.66, -3.66, 3.66, 3.66], y=[30, 31.5, 31.5, 30],
+    mode='lines', line=dict(color='rgba(255,255,255,0.4)', width=1.5, dash='dash'), showlegend=False, hoverinfo='skip'
 ))
 # Penalty Spot Marker (11 meters out from y=30)
 fig_map.add_trace(go.Scatter(
@@ -52,27 +58,27 @@ if 'click_y' not in st.session_state: st.session_state.click_y = 11.0 # default 
 # Render current point selection overlay on 2D tactical map
 fig_map.add_trace(go.Scatter(
     x=[st.session_state.click_x], y=[30.0 - st.session_state.click_y],
-    mode='markers', marker=dict(color='#ff1100', size=12, symbol='x'), name='Ball Placement', showlegend=False
+    mode='markers', marker=dict(color='#ff1100', size=12, symbol='x', line=dict(color='white', width=1)), name='Ball Placement', showlegend=False
 ))
 
 fig_map.update_layout(
     template="plotly_dark",
-    xaxis=dict(range=[-16, 16], showgrid=False, zeroline=False, visible=False),
-    yaxis=dict(range=[-2, 32], showgrid=False, zeroline=False, visible=False),
-    width=280, height=280, margin=dict(l=5, r=5, b=5, t=5),
+    xaxis=dict(range=[-17, 17], showgrid=False, zeroline=False, visible=False),
+    yaxis=dict(range=[-3, 33], showgrid=False, zeroline=False, visible=False),
+    width=260, height=260, margin=dict(l=0, r=0, b=0, t=0),
     clickmode='event+select'
 )
 
-# Capture Click coordinate returns through bidirectional stream
-selected_point = plotly_events(fig_map, click_event=True, hover_event=False, override_height=290)
+# Capture Click coordinate returns directly inside the sidebar container
+with st.sidebar:
+    selected_point = plotly_events(fig_map, click_event=True, hover_event=False, override_height=265)
 
 if selected_point:
     st.session_state.click_x = round(selected_point[0]['x'], 1)
-    # Map visual chart coordinate layout inverted back to depth constraints
     st.session_state.click_y = round(30.0 - selected_point[0]['y'], 1)
 
 # Display real-time readouts underneath map graphic selector
-st.sidebar.markdown(f"**Selected Coordinates:** Dist: `{st.session_state.click_y}m` | Lat: `{st.session_state.click_x}m`")
+st.sidebar.markdown(f"**Coordinates:** Distance: `{st.session_state.click_y}m` | Lateral: `{st.session_state.click_x}m`")
 
 # --- FLIGHT CONTROLS ---
 st.sidebar.header("📥 Launch Profile")
@@ -191,24 +197,28 @@ fig.add_trace(go.Scatter3d(
     mode='lines', line=dict(color='#ff1100', width=8), name='Ball Flight Line'
 ))
 
-# 3. PHOTOREALISTIC SOCCER BALL PATTERN MAPPING (Explicit Multi-Panel Geometries)
+# 3. FIXED HIGH-REALISM PANEL-MAPPED SOCCER BALL
 bx, by, bz = z_p[-1], x_p[-1], y_p[-1]
-# Spherical white base body
+
+# Base white leather sphere shape
 fig.add_trace(go.Scatter3d(
     x=[bx], y=[by], z=[bz], mode='markers',
     marker=dict(size=18, color='#ffffff', symbol='circle', line=dict(color='#111111', width=1.5)),
     name='Soccer Ball'
 ))
-# Hexagonal border seams layer
+# Alternating Pentagonal Panel Layer (Using valid 3D shapes to prevent crashing)
 fig.add_trace(go.Scatter3d(
-    x=[bx], y=[by], z=[bz], mode='markers',
-    marker=dict(size=13, color='#e5e7eb', symbol='hexagon-open', line=dict(width=2)), showlegend=False
-))
-# Alternating Pentagonal dark mesh patches (Matches the Classic BBC look)
-fig.add_trace(go.Scatter3d(
-    x=[bx, bx, bx], y=[by, by, by], z=[bz+0.04, bz-0.04, bz],
+    x=[bx, bx, bx, bx, bx], 
+    y=[by, by, by, by, by], 
+    z=[bz+0.05, bz-0.05, bz, bz+0.02, bz-0.02],
     mode='markers',
-    marker=dict(size=[7, 7, 8], color=['#111111', '#111111', '#111111'], symbol=['square', 'square', 'diamond']),
+    marker=dict(size=7, color='#111111', symbol='diamond'),
+    showlegend=False
+))
+fig.add_trace(go.Scatter3d(
+    x=[bx, bx], y=[by+0.03, by-0.03], z=[bz, bz],
+    mode='markers',
+    marker=dict(size=6, color='#111111', symbol='square'),
     showlegend=False
 ))
 
@@ -244,11 +254,11 @@ for i in range(net_density_w + 1):
     x_curr = xl + frac * gw
     fig.add_trace(go.Scatter3d(
         x=[x_curr, x_curr], y=[net_depth, net_depth], z=[0, gh],
-        mode='lines', line=dict(color='rgba(243, 244, 246, 0.8)', width=3.5), showlegend=False, hoverinfo='skip'
+        mode='lines', line=dict(color='rgba(243, 244, 246, 0.85)', width=3.5), showlegend=False, hoverinfo='skip'
     ))
     fig.add_trace(go.Scatter3d(
         x=[x_curr, x_curr], y=[y_line, net_depth], z=[gh, gh],
-        mode='lines', line=dict(color='rgba(243, 244, 246, 0.8)', width=3.5), showlegend=False, hoverinfo='skip'
+        mode='lines', line=dict(color='rgba(243, 244, 246, 0.85)', width=3.5), showlegend=False, hoverinfo='skip'
     ))
 
 # Rear horizontal cross strings
@@ -256,7 +266,7 @@ for i in range(7):
     z_curr = (i / 6) * gh
     fig.add_trace(go.Scatter3d(
         x=[xl, xr], y=[net_depth, net_depth], z=[z_curr, z_curr],
-        mode='lines', line=dict(color='rgba(243, 244, 246, 0.7)', width=3.5), showlegend=False, hoverinfo='skip'
+        mode='lines', line=dict(color='rgba(243, 244, 246, 0.75)', width=3.5), showlegend=False, hoverinfo='skip'
     ))
 
 # Reinforced side structural netting panels
@@ -265,22 +275,22 @@ for i in range(net_density_d + 1):
     y_curr = y_line + frac * 2.0
     fig.add_trace(go.Scatter3d(
         x=[xl, xl], y=[y_curr, y_curr], z=[0, gh],
-        mode='lines', line=dict(color='rgba(243, 244, 246, 0.7)', width=3.0), showlegend=False, hoverinfo='skip'
+        mode='lines', line=dict(color='rgba(243, 244, 246, 0.75)', width=3.0), showlegend=False, hoverinfo='skip'
     ))
     fig.add_trace(go.Scatter3d(
         x=[xr, xr], y=[y_curr, y_curr], z=[0, gh],
-        mode='lines', line=dict(color='rgba(243, 244, 246, 0.7)', width=3.0), showlegend=False, hoverinfo='skip'
+        mode='lines', line=dict(color='rgba(243, 244, 246, 0.75)', width=3.0), showlegend=False, hoverinfo='skip'
     ))
 
 for i in range(7):
     z_curr = (i / 6) * gh
     fig.add_trace(go.Scatter3d(
         x=[xl, xl], y=[y_line, net_depth], z=[z_curr, z_curr],
-        mode='lines', line=dict(color='rgba(243, 244, 246, 0.7)', width=3.0), showlegend=False, hoverinfo='skip'
+        mode='lines', line=dict(color='rgba(243, 244, 246, 0.75)', width=3.0), showlegend=False, hoverinfo='skip'
     ))
     fig.add_trace(go.Scatter3d(
         x=[xr, xr], y=[y_line, net_depth], z=[z_curr, z_curr],
-        mode='lines', line=dict(color='rgba(243, 244, 246, 0.7)', width=3.0), showlegend=False, hoverinfo='skip'
+        mode='lines', line=dict(color='rgba(243, 244, 246, 0.75)', width=3.0), showlegend=False, hoverinfo='skip'
     ))
 
 # --- CAMERA PERSPECTIVE SETUP ---
