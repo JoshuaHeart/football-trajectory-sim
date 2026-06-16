@@ -1,32 +1,81 @@
 import math
 import plotly.graph_objects as go
 import streamlit as st
+from streamlit_plotly_events import plotly_events
 
 # --- STREAMLIT PAGE CONFIG ---
-st.set_page_config(page_title="3D Trajectory Engine", layout="wide")
+st.set_page_config(page_title="Pro-Pitch Flight Engine", layout="wide")
 
+# Install warning handling for dependencies
 st.markdown("""
     <style>
     .main { background-color: #ffffff; color: #000000; }
     h1 { color: #003366 !important; font-family: 'Arial Black'; }
     .sidebar .sidebar-content h2, .sidebar .sidebar-content h1, h3 { color: #003366 !important; }
     div[data-testid="stMetricValue"] { color: #003366; font-weight: bold; }
-    /* Goal Alert Styling */
     .goal-banner { text-align: center; font-size: 45px; font-weight: bold; padding: 15px; border-radius: 10px; margin-bottom: 20px; font-family: 'Arial Black'; }
     .status-goal { background-color: #d4edda; color: #155724; border: 4px solid #c3e6cb; }
     .status-miss { background-color: #f8d7da; color: #721c24; border: 4px solid #f5c6cb; }
+    /* Style the sidebar selection zone */
+    div[data-testid="stSidebarUserContent"] { padding-top: 1rem; }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚽ 3D Trajectory Engine")
+st.title("⚽ Elite Trajectory Analytics")
 
-# --- SIDEBAR INPUTS ---
-st.sidebar.header("📍 Starting Position")
-# Adjustable starting coordinates (2D pitch floor position)
-start_depth = st.sidebar.slider("Shot Distance (Depth i - meters from goalline)", 11.0, 35.0, 22.0, 0.5)
-start_lateral = st.sidebar.slider("Shot Angle (Lateral k - left (-) to right (+))", -15.0, 15.0, 0.0, 0.5)
+# --- SIDEBAR INTERACTIVE MAP ZONE ---
+st.sidebar.header("📍 Click to Select Starting Position")
+st.sidebar.write("Tap anywhere on the tactical pitch layout below to set your exact strike coordinates:")
 
-st.sidebar.header("📥 Initial Launch")
+# Generate the 2D Selector Map Layout
+fig_map = go.Figure()
+
+# Pitch Outline Boundary (30m depth x 30m width matrix)
+fig_map.add_trace(go.Scatter(
+    x=[-15, 15, 15, -15, -15], y=[0, 0, 30, 30, 0],
+    mode='lines', line=dict(color='#ffffff', width=2), showlegend=False, hoverinfo='skip'
+))
+# Goal Outline represented at the top baseline (y=30)
+fig_map.add_trace(go.Scatter(
+    x=[-3.66, 3.66], y=[30, 30],
+    mode='lines', line=dict(color='#ff0055', width=5), name='Goal Mouth', showlegend=False
+))
+# Penalty Spot Marker (11 meters out from y=30)
+fig_map.add_trace(go.Scatter(
+    x=[0], y=[19], mode='markers', marker=dict(color='#ffffff', size=6), showlegend=False, hoverinfo='skip'
+))
+
+# Initialize state-safe defaults for selections
+if 'click_x' not in st.session_state: st.session_state.click_x = 0.0
+if 'click_y' not in st.session_state: st.session_state.click_y = 11.0 # default 11m penalty distance
+
+# Render current point selection overlay on 2D tactical map
+fig_map.add_trace(go.Scatter(
+    x=[st.session_state.click_x], y=[30.0 - st.session_state.click_y],
+    mode='markers', marker=dict(color='#ff1100', size=12, symbol='x'), name='Ball Placement', showlegend=False
+))
+
+fig_map.update_layout(
+    template="plotly_dark",
+    xaxis=dict(range=[-16, 16], showgrid=False, zeroline=False, visible=False),
+    yaxis=dict(range=[-2, 32], showgrid=False, zeroline=False, visible=False),
+    width=280, height=280, margin=dict(l=5, r=5, b=5, t=5),
+    clickmode='event+select'
+)
+
+# Capture Click coordinate returns through bidirectional stream
+selected_point = plotly_events(fig_map, click_event=True, hover_event=False, override_height=290)
+
+if selected_point:
+    st.session_state.click_x = round(selected_point[0]['x'], 1)
+    # Map visual chart coordinate layout inverted back to depth constraints
+    st.session_state.click_y = round(30.0 - selected_point[0]['y'], 1)
+
+# Display real-time readouts underneath map graphic selector
+st.sidebar.markdown(f"**Selected Coordinates:** Dist: `{st.session_state.click_y}m` | Lat: `{st.session_state.click_x}m`")
+
+# --- FLIGHT CONTROLS ---
+st.sidebar.header("📥 Launch Profile")
 v0 = st.sidebar.slider("Velocity (m/s)", 5.0, 35.0, 24.5)
 theta_deg = st.sidebar.slider("Vertical Angle (degrees)", -10.0, 50.0, 14.5)
 phi_deg = st.sidebar.slider("Horizontal Angle (degrees)", -45.0, 45.0, -1.8)
@@ -50,7 +99,7 @@ MASS, RADIUS, RHO, G, MU, LENG = 0.42, 0.11, 1.225, 9.81, 1.8e-5, 0.22
 A = math.pi * RADIUS**2
 DT = 0.004
 SPIN_DECAY = 0.997
-GOAL_LINE_DEPTH = 30.0  # Fixed absolute coordinate for the goalmouth line
+GOAL_LINE_DEPTH = 30.0
 
 def get_accel(v_vec, current_spin):
     vx, vy, vz = v_vec
@@ -70,14 +119,11 @@ def get_accel(v_vec, current_spin):
     az = (-Cd * S * v_mag * vz + Cl * S * RADIUS * cz) / MASS
     return ax, ay, az
 
-# --- INITIALIZE STATE ---
+# --- INITIALIZE STATE ENGINE ---
 tr, pr = math.radians(theta_deg), math.radians(phi_deg)
-
-# Derive initial positions based on user input
-# Depth runs from 0 at player baseline towards GOAL_LINE_DEPTH
-init_x = GOAL_LINE_DEPTH - start_depth 
+init_x = GOAL_LINE_DEPTH - st.session_state.click_y
 init_y = 0.11
-init_z = start_lateral
+init_z = st.session_state.click_x
 
 state = [
     init_x, init_y, init_z, 
@@ -88,7 +134,7 @@ state = [
 spin = spin_mag_init
 x_p, y_p, z_p = [state[0]], [state[1]], [state[2]]
 
-# --- RK4 LOOP ---
+# --- RK4 SIMULATION LOOP ---
 while state[1] >= 0.1 and state[0] < GOAL_LINE_DEPTH:
     v_curr = state[3:6]
     k1 = get_accel(v_curr, spin)
@@ -103,7 +149,7 @@ while state[1] >= 0.1 and state[0] < GOAL_LINE_DEPTH:
     x_p.append(state[0]); y_p.append(state[1]); z_p.append(state[2])
     spin *= SPIN_DECAY
 
-# --- GOAL DETECTOR LOGIC (7.32m x 2.44m Goal Frame at GOAL_LINE_DEPTH) ---
+# --- GOAL DETECTOR CHECK ---
 gw, gh, gk = 7.32, 2.44, 0.0
 is_goal = False
 
@@ -114,22 +160,22 @@ if abs(state[0] - GOAL_LINE_DEPTH) < 0.5:
         is_goal = True
 
 if is_goal:
-    st.markdown('<div class="goal-banner status-goal">🚀 GOALL!!!! GOALL!!! 🔥</div>', unsafe_allow_html=True)
+    st.markdown('<div class="goal-banner status-goal">🚀 GOALL!!!! GOALL!!! ⚽🔥</div>', unsafe_allow_html=True)
 else:
-    st.markdown('<div class="goal-banner status-miss">❌ MISSED 🧤</div>', unsafe_allow_html=True)
+    st.markdown('<div class="goal-banner status-miss">❌ MISSED / SAVED 🧤</div>', unsafe_allow_html=True)
 
-# --- METRICS ---
+# --- DISPLAY METRICS ---
 total_dist = math.sqrt((state[0]-init_x)**2 + (state[1]-init_y)**2 + (state[2]-init_z)**2)
 c1, c2, c3 = st.columns(3)
-c1.metric("Total Shot Trajectory Distance", f"{total_dist:.2f} m")
-c2.metric("Final Landing Height", f"{state[1]:.2f} m")
-c3.metric("Goal Line Cross Position (k)", f"{state[2]:.2f} m")
+c1.metric("Trajectory Length", f"{total_dist:.2f} m")
+c2.metric("Final Flight Height", f"{state[1]:.2f} m")
+c3.metric("Goal Line Cross Deviation", f"{state[2]:.2f} m")
 
-# --- 3D RENDERING ---
+# --- MAIN 3D RENDER ENGINE ---
 fig = go.Figure()
 
-# 1. REALISTIC STRIPED GRASS PITCH
-pitch_width = 30
+# 1. STRIPED TURF GRASS CORES
+pitch_width = 32
 for start_y in range(-5, int(GOAL_LINE_DEPTH) + 15, 4):
     color = '#1e4620' if (start_y // 4) % 2 == 0 else '#2d5a27'
     fig.add_trace(go.Mesh3d(
@@ -139,117 +185,105 @@ for start_y in range(-5, int(GOAL_LINE_DEPTH) + 15, 4):
         color=color, opacity=1.0, showlegend=False, hoverinfo='skip'
     ))
 
-# 2. RED TRAJECTORY LINE
+# 2. FLIGHT PATH TRACE
 fig.add_trace(go.Scatter3d(
     x=z_p, y=x_p, z=y_p,
-    mode='lines', line=dict(color='#ff1100', width=8),
-    name='Ball Path'
+    mode='lines', line=dict(color='#ff1100', width=8), name='Ball Flight Line'
 ))
 
-# 3. HIGH-REALISM PANEL-MAPPED SOCCER BALL (Stacked multi-marker array)
-# Base white leather profile
+# 3. PHOTOREALISTIC SOCCER BALL PATTERN MAPPING (Explicit Multi-Panel Geometries)
+bx, by, bz = z_p[-1], x_p[-1], y_p[-1]
+# Spherical white base body
 fig.add_trace(go.Scatter3d(
-    x=[z_p[-1]], y=[x_p[-1]], z=[y_p[-1]],
-    mode='markers',
-    marker=dict(size=16, color='#ffffff', symbol='circle', line=dict(color='#000000', width=2.5)),
+    x=[bx], y=[by], z=[bz], mode='markers',
+    marker=dict(size=18, color='#ffffff', symbol='circle', line=dict(color='#111111', width=1.5)),
     name='Soccer Ball'
 ))
-# Hexagonal/Pentagonal black contrast panels overlay
+# Hexagonal border seams layer
 fig.add_trace(go.Scatter3d(
-    x=[z_p[-1]], y=[x_p[-1]], z=[y_p[-1]],
-    mode='markers',
-    marker=dict(size=11, color='#111111', symbol='diamond-open', line=dict(width=3)),
-    showlegend=False
+    x=[bx], y=[by], z=[bz], mode='markers',
+    marker=dict(size=13, color='#e5e7eb', symbol='hexagon-open', line=dict(width=2)), showlegend=False
 ))
+# Alternating Pentagonal dark mesh patches (Matches the Classic BBC look)
 fig.add_trace(go.Scatter3d(
-    x=[z_p[-1]], y=[x_p[-1]], z=[y_p[-1]],
+    x=[bx, bx, bx], y=[by, by, by], z=[bz+0.04, bz-0.04, bz],
     mode='markers',
-    marker=dict(size=5, color='#111111', symbol='circle'),
+    marker=dict(size=[7, 7, 8], color=['#111111', '#111111', '#111111'], symbol=['square', 'square', 'diamond']),
     showlegend=False
 ))
 
-# 4. 3D ALUMINUM GOALPOSTS
+# 4. ALUMINUM STYLED GOALPOST RIGGING
 def add_3d_post(x0, y0, z0, x1, y1, z1, name, show=False):
     fig.add_trace(go.Scatter3d(
         x=[x0, x1], y=[y0, y1], z=[z0, z1],
-        mode='lines', line=dict(color='#e5e7eb', width=12),
-        name=name, showlegend=show
+        mode='lines', line=dict(color='#f3f4f6', width=11), name=name, showlegend=show
     ))
 
 xl, xr, y_line = gk - gw/2, gk + gw/2, GOAL_LINE_DEPTH
-# Goal Front Frame
 add_3d_post(xl, y_line, 0, xl, y_line, gh, 'Goal Frame', show=True) 
 add_3d_post(xr, y_line, 0, xr, y_line, gh, 'Goal Frame')          
 add_3d_post(xl, y_line, gh, xr, y_line, gh, 'Goal Frame')         
 
-# Box Net Depth Structure
+# Deep Box framework anchors
 net_depth = y_line + 2.0
 add_3d_post(xl, net_depth, 0, xl, net_depth, gh, 'Net Support Framework')   
 add_3d_post(xr, net_depth, 0, xr, net_depth, gh, 'Net Support Framework')   
 add_3d_post(xl, net_depth, gh, xr, net_depth, gh, 'Net Support Framework')  
 add_3d_post(xl, y_line, gh, xl, net_depth, gh, 'Net Support Framework')     
 add_3d_post(xr, y_line, gh, xr, net_depth, gh, 'Net Support Framework')     
-# Base Ground Bars
 add_3d_post(xl, y_line, 0, xl, net_depth, 0, 'Net Support Framework')
 add_3d_post(xr, y_line, 0, xr, net_depth, 0, 'Net Support Framework')
 
-# 5. REINFORCED MESH GEOMETRY (Thicker Lines, Rear Backing & Side Nettings)
-net_density_w = 14
-net_density_d = 6
+# 5. INDUSTRIAL STRENGTH HIGH-DENSITY NET FABRIC
+net_density_w = 16
+net_density_d = 7
 
-# Back net face + roof lines
+# Rear wall meshes and roof strands
 for i in range(net_density_w + 1):
     frac = i / net_density_w
     x_curr = xl + frac * gw
-    # Rear Face Vertical Strands
     fig.add_trace(go.Scatter3d(
         x=[x_curr, x_curr], y=[net_depth, net_depth], z=[0, gh],
-        mode='lines', line=dict(color='rgba(220, 220, 220, 0.65)', width=3.0), showlegend=False, hoverinfo='skip'
+        mode='lines', line=dict(color='rgba(243, 244, 246, 0.8)', width=3.5), showlegend=False, hoverinfo='skip'
     ))
-    # Roof Longitudinal Strands
     fig.add_trace(go.Scatter3d(
         x=[x_curr, x_curr], y=[y_line, net_depth], z=[gh, gh],
-        mode='lines', line=dict(color='rgba(220, 220, 220, 0.65)', width=3.0), showlegend=False, hoverinfo='skip'
+        mode='lines', line=dict(color='rgba(243, 244, 246, 0.8)', width=3.5), showlegend=False, hoverinfo='skip'
     ))
 
-# Rear Face Horizontal strands
+# Rear horizontal cross strings
 for i in range(7):
     z_curr = (i / 6) * gh
     fig.add_trace(go.Scatter3d(
         x=[xl, xr], y=[net_depth, net_depth], z=[z_curr, z_curr],
-        mode='lines', line=dict(color='rgba(220, 220, 220, 0.55)', width=3.0), showlegend=False, hoverinfo='skip'
+        mode='lines', line=dict(color='rgba(243, 244, 246, 0.7)', width=3.5), showlegend=False, hoverinfo='skip'
     ))
 
-# --- SIDE NETTING SECTIONS ---
+# Reinforced side structural netting panels
 for i in range(net_density_d + 1):
     frac = i / net_density_d
     y_curr = y_line + frac * 2.0
-    # Left Side Wall Vertical Strands
     fig.add_trace(go.Scatter3d(
         x=[xl, xl], y=[y_curr, y_curr], z=[0, gh],
-        mode='lines', line=dict(color='rgba(220, 220, 220, 0.55)', width=2.5), showlegend=False, hoverinfo='skip'
+        mode='lines', line=dict(color='rgba(243, 244, 246, 0.7)', width=3.0), showlegend=False, hoverinfo='skip'
     ))
-    # Right Side Wall Vertical Strands
     fig.add_trace(go.Scatter3d(
         x=[xr, xr], y=[y_curr, y_curr], z=[0, gh],
-        mode='lines', line=dict(color='rgba(220, 220, 220, 0.55)', width=2.5), showlegend=False, hoverinfo='skip'
+        mode='lines', line=dict(color='rgba(243, 244, 246, 0.7)', width=3.0), showlegend=False, hoverinfo='skip'
     ))
 
-# Side Wall Horizontal structural mesh weaves
 for i in range(7):
     z_curr = (i / 6) * gh
-    # Left side panel sheet
     fig.add_trace(go.Scatter3d(
         x=[xl, xl], y=[y_line, net_depth], z=[z_curr, z_curr],
-        mode='lines', line=dict(color='rgba(220, 220, 220, 0.55)', width=2.5), showlegend=False, hoverinfo='skip'
+        mode='lines', line=dict(color='rgba(243, 244, 246, 0.7)', width=3.0), showlegend=False, hoverinfo='skip'
     ))
-    # Right side panel sheet
     fig.add_trace(go.Scatter3d(
         x=[xr, xr], y=[y_line, net_depth], z=[z_curr, z_curr],
-        mode='lines', line=dict(color='rgba(220, 220, 220, 0.55)', width=2.5), showlegend=False, hoverinfo='skip'
+        mode='lines', line=dict(color='rgba(243, 244, 246, 0.7)', width=3.0), showlegend=False, hoverinfo='skip'
     ))
 
-# --- CAMERA CONFIGURATION ---
+# --- CAMERA PERSPECTIVE SETUP ---
 fig.update_layout(
     template="plotly_dark",
     scene=dict(
@@ -258,7 +292,7 @@ fig.update_layout(
         zaxis=dict(showgrid=False, showbackground=False, zeroline=False, visible=False),
         aspectmode='data',
         camera=dict(
-            eye=dict(x=-0.9, y=-1.5, z=0.6),
+            eye=dict(x=-0.8, y=-1.4, z=0.55),
             up=dict(x=0, y=0, z=1)
         )
     ),
