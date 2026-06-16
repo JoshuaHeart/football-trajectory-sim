@@ -38,12 +38,21 @@ kick_style = st.sidebar.selectbox(
 )
 spin_mag_init = st.sidebar.slider("Spin Intensity (rad/s)", 0.0, 100.0, 65.0)
 
-# Map Selection to Vectors
-if "Topspin" in kick_style: nx, ny, nz = 1.0, 0.0, 0.0
-elif "Backspin" in kick_style: nx, ny, nz = -1.0, 0.0, 0.0
-elif "Clockwise" in kick_style: nx, ny, nz = 0.0, 0.0, 1.0
-elif "Counter-Clockwise" in kick_style: nx, ny, nz = 0.0, 0.0, -1.0
-else: nx, ny, nz, spin_mag_init = 0.0, 0.0, 0.0, 0.0
+# Updated Mapping: 
+# nx = Vertical spin axis (affects lift: cz/cx)
+# ny = Longitudinal spin axis (rarely used for ball curve)
+# nz = Lateral spin axis (affects side-to-side: cx/cy)
+
+if "Topspin" in kick_style: 
+    nx, ny, nz = 0.0, 0.0, 1.0  # Spin around Z produces force in X (Height)
+elif "Backspin" in kick_style: 
+    nx, ny, nz = 0.0, 0.0, -1.0
+elif "Clockwise" in kick_style: 
+    nx, ny, nz = 1.0, 0.0, 0.0  # Spin around X produces force in Z (Lateral)
+elif "Counter-Clockwise" in kick_style: 
+    nx, ny, nz = -1.0, 0.0, 0.0
+else: 
+    nx, ny, nz = 0.0, 0.0, 0.0
 
 # --- CONSTANTS & PHYSICS (RK4) ---
 MASS, RADIUS, RHO, G, MU, LENG = 0.42, 0.11, 1.225, 9.81, 1.8e-5, 0.22
