@@ -38,19 +38,15 @@ kick_style = st.sidebar.selectbox(
 )
 spin_mag_init = st.sidebar.slider("Spin Intensity (rad/s)", 0.0, 100.0, 65.0)
 
-# Updated Mapping: 
-# nx = Vertical spin axis (affects lift: cz/cx)
-# ny = Longitudinal spin axis (rarely used for ball curve)
-# nz = Lateral spin axis (affects side-to-side: cx/cy)
-
+# Spin Vector mapping (nx=Vertical/Pitch Axis, ny=Forward Axis, nz=Lateral Axis)
 if "Topspin" in kick_style: 
-    nx, ny, nz = 0.0, 0.0, 1.0  # Spin around Z produces force in X (Height)
+    nx, ny, nz = 0.0, 0.0, 1.0  # Rotation around Z produces Vertical force (cx, cy)
 elif "Backspin" in kick_style: 
     nx, ny, nz = 0.0, 0.0, -1.0
 elif "Clockwise" in kick_style: 
-    nx, ny, nz = 1.0, 0.0, 0.0  # Spin around X produces force in Z (Lateral)
+    nx, ny, nz = 1.0, 0.0, 0.0  # Rotation around X produces Lateral force (cz)
 elif "Counter-Clockwise" in kick_style: 
-    nx, ny, nz = -1.0, 0.0, 0.0
+    nx, ny, nz = -1.0, 0.0, 0.0 # Rotation around X produces Lateral force (cz)
 else: 
     nx, ny, nz = 0.0, 0.0, 0.0
 
@@ -66,18 +62,20 @@ def get_accel(v_vec, current_spin):
     v_mag = math.sqrt(vx**2 + vy**2 + vz**2)
     if v_mag < 0.1: return 0, -G, 0
     
-    # Magnus Vector calculation (Cross product of spin axis and velocity)
+    # Spin axis vector
     wx, wy, wz = current_spin*nx, current_spin*ny, current_spin*nz
+    
+    # Magnus force components
     cx = (wy * vz - wz * vy)
     cy = (wz * vx - wx * vz)
     cz = (wx * vy - wy * vx)
     
-    # Calculate Drag and Lift
-    Re = RHO * v_mag * LENG / MU
-    Cd = 0.18 if Re > 1.5e5 else 0.41
-    Cl = 0.15 # Stable Magnus coefficient for realistic ball curve
+    # If Clockwise/CCW (nx=1), cz = (1 * vy - 0 * vx) = vy. 
+    # This creates a force proportional to forward velocity (vy).
     
-    # Apply acceleration
+    Cd = 0.3 # Standard drag
+    Cl = 0.15 # Lift coefficient
+    
     ax = (-Cd * 0.5 * RHO * A * v_mag * vx + Cl * RHO * A * RADIUS * cx) / MASS
     ay = (-Cd * 0.5 * RHO * A * v_mag * vy + Cl * RHO * A * RADIUS * cy) / MASS - G
     az = (-Cd * 0.5 * RHO * A * v_mag * vz + Cl * RHO * A * RADIUS * cz) / MASS
