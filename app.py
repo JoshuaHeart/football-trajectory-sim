@@ -57,19 +57,23 @@ def get_accel(v_vec, current_spin):
     v_mag = math.sqrt(vx**2 + vy**2 + vz**2)
     if v_mag < 0.1: return 0, -G, 0
     
+    # Magnus Vector calculation (Cross product of spin axis and velocity)
+    wx, wy, wz = current_spin*nx, current_spin*ny, current_spin*nz
+    cx = (wy * vz - wz * vy)
+    cy = (wz * vx - wx * vz)
+    cz = (wx * vy - wy * vx)
+    
+    # Calculate Drag and Lift
     Re = RHO * v_mag * LENG / MU
     Cd = 0.18 if Re > 1.5e5 else 0.41
-    Cl = (RADIUS * current_spin) / v_mag
+    Cl = 0.15 # Stable Magnus coefficient for realistic ball curve
     
-    wx, wy, wz = current_spin*nx, current_spin*ny, current_spin*nz
-    cx, cy, cz = (wy*vz - wz*vy), (wz*vx - wx*vz), (wx*vy - wy*vx)
+    # Apply acceleration
+    ax = (-Cd * 0.5 * RHO * A * v_mag * vx + Cl * RHO * A * RADIUS * cx) / MASS
+    ay = (-Cd * 0.5 * RHO * A * v_mag * vy + Cl * RHO * A * RADIUS * cy) / MASS - G
+    az = (-Cd * 0.5 * RHO * A * v_mag * vz + Cl * RHO * A * RADIUS * cz) / MASS
     
-    S = 0.5 * RHO * A
-    ax = (-Cd * S * v_mag * vx + Cl * S * RADIUS * cx) / MASS
-    ay = (-Cd * S * v_mag * vy + Cl * S * RADIUS * cy) / MASS - G
-    az = (-Cd * S * v_mag * vz + Cl * S * RADIUS * cz) / MASS
     return ax, ay, az
-
 # --- INITIALIZE STATE ---
 tr, pr = math.radians(theta_deg), math.radians(phi_deg)
 
