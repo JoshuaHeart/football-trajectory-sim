@@ -3,7 +3,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 # --- STREAMLIT PAGE CONFIG ---
-st.set_page_config(page_title="RK4 3D Flight Engine", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="3D Flight Engine", layout="wide", initial_sidebar_state="expanded")
 
 # Force Dark Mode Styling
 st.markdown("""
@@ -14,20 +14,44 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚽ RK4 3D Aerodynamic Flight Trajectory Engine")
+st.title("Realistic FOotball Trajectory Simulator")
 st.write("High-fidelity fluid dynamics simulation using 4th-Order Runge-Kutta integration.")
 
 # --- SIDEBAR INPUT CONTROLS ---
-st.sidebar.header("📥 Initial Launch Parameters")
+st.sidebar.header("📥 Initial Launch")
 v0 = st.sidebar.slider("Initial Velocity (v0 - m/s)", 5.0, 35.0, 13.2, 0.1)
 theta_deg = st.sidebar.slider("Vertical Launch Angle (θ - degrees)", -10.0, 50.0, 25.2, 0.1)
-phi_deg = st.sidebar.slider("Horizontal Launch Angle (φ - degrees)", -45.0, 45.0, 0.0, 0.1)
+phi_deg = st.sidebar.slider("Horizontal Launch Angle (φ - degrees) right is positive, left is negative", -45.0, 45.0, 0.0, 0.1)
 
-st.sidebar.header("🌀 Spin Vector Configuration")
-spin_mag_init = st.sidebar.slider("Spin Magnitude (rad/s)", 0.0, 100.0, 47.2, 0.1)
-nx = st.sidebar.slider("Spin Axis X (nx - Back/Topspin)", -1.0, 1.0, 0.0, 0.1)
-ny = st.sidebar.slider("Spin Axis Y (ny)", -1.0, 1.0, 0.0, 0.1)
-nz = st.sidebar.slider("Spin Axis Z (nz - Sidespin)", -1.0, 1.0, 1.0, 0.1)
+st.sidebar.header("🌀 Spin Configuration")
+
+# 1. Simplified Selection Box for accessibility
+kick_style = st.sidebar.selectbox(
+    "Select Kick Style / Spin Type",
+    [
+        "Pure Topspin (Dip / Knuckle-drop)",
+        "Pure Backspin (Driven / Looped)",
+        "Clockwise Curler (Left-Foot Inside / Right-Foot Trivela)",
+        "Counter-Clockwise Curler (Right-Foot Inside / Left-Foot Trivela)",
+        "No Spin (Struck Clean)"
+    ]
+)
+
+# 2. Intuitive Spin Magnitude Slider (retains the rad/s math)
+spin_mag_init = st.sidebar.slider("Spin Intensity (Magnitude - rad/s)", 0.0, 100.0, 47.2, 0.1)
+
+# 3. Behind-the-scenes Mathematical Mapping (keeps your exact physics intact)
+if kick_style == "Pure Topspin (Dip / Knuckle-drop)":
+    nx, ny, nz = 1.0, 0.0, 0.0
+elif kick_style == "Pure Backspin (Driven / Looped)":
+    nx, ny, nz = -1.0, 0.0, 0.0
+elif kick_style == "Clockwise Curler (Left-Foot Inside / Right-Foot Trivela)":
+    nx, ny, nz = 0.0, 0.0, 1.0
+elif kick_style == "Counter-Clockwise Curler (Right-Foot Inside / Left-Foot Trivela)":
+    nx, ny, nz = 0.0, 0.0, -1.0
+else:  # No Spin
+    nx, ny, nz = 0.0, 0.0, 0.0
+    spin_mag_init = 0.0  # Force magnitude to zero
 
 # Ensure spin axis is a normalized unit vector
 axis_mag = math.sqrt(nx**2 + ny**2 + nz**2)
@@ -53,7 +77,7 @@ SPIN_DECAY = 0.999
 
 # --- HELPER FUNCTIONS FOR RK4 ---
 def get_acceleration(v_vec, current_spin):
-    """Calculates instantaneous 3D acceleration vector due to Gravity, Drag, and Magnus forces."""
+    """Calculates acceleration vector due to Gravity, Drag, and Magnus forces."""
     vi, vj, vk = v_vec
     v_mag = math.sqrt(vi**2 + vj**2 + vk**2)
     if v_mag == 0:
@@ -73,7 +97,7 @@ def get_acceleration(v_vec, current_spin):
 
     S = 0.5 * RHO * A * v_mag
 
-    # Calculate Magnus components via cross product framework (Spin x Velocity)
+    # Calculate Magnus components 
     # Spin components: wx = current_spin * nx, etc.
     wx, wy, wz = current_spin * nx, current_spin * ny, current_spin * nz
     
@@ -117,7 +141,7 @@ spin_mag = spin_mag_init
 i_path, j_path, k_path = [state[0]], [state[1]], [state[2]]
 
 # --- RK4 INTEGRATION LOOP ---
-max_iterations = 25000
+max_iterations = 250000
 iterations = 0
 
 while state[1] >= 0.11 and state[0] < I_DIST:
